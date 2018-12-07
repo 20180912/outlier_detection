@@ -3,19 +3,30 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #importing the data set
 filename = 'train.gz'
-chunksize = 10000
+ 
+chunksize = 100000
 chunks=[]
 for chunk in pd.read_csv(filename, compression='gzip', header=0, sep=',', usecols= ['hour', 'click'], index_col='hour', chunksize=chunksize):
+    chunk['impression'] = 1
+    #converting the index column to datetime and resampling
+    time_format = '%y%m%d%H'
+    chunk.index = pd.to_datetime(chunk.index, format=time_format)
+    chunk=chunk.resample('H').sum()
     chunks.append(chunk)
+ 
 df = pd.concat(chunks)
+df = df.groupby(df.index).sum()
+ 
 """
+#The following simpler code works as well but requires more RAM
 df = pd.read_csv(filename, compression='gzip', header=0, sep=',', usecols= ['hour', 'click'], index_col='hour')
-"""
 df['impression'] = 1
 #converting the index column to datetime and resampling
 time_format = '%y%m%d%H'
 df.index = pd.to_datetime(df.index, format=time_format)
 df=df.resample('H').sum()
+"""
+ 
 df['CTR']=df['click']/df['impression']
 #calculating moving average with beginning fixed, alternatively use df['CTR'].rolling(window=...).mean() for a constant time frame
 df['CTR_moving_avg'] = df['CTR'].expanding().mean()
@@ -23,7 +34,7 @@ df['CTR_moving_std'] = df['CTR'].expanding().std()
 #boolean indexing to capture only outliers in new column
 mask = abs(df['CTR']-df['CTR_moving_avg'])>1.5*df['CTR_moving_std']
 df['outlier'] = df.loc[mask,'CTR']
-
+ 
 #task No.1
 plt.figure(num=None, figsize=(16, 9), dpi=80, facecolor='w')
 plt.subplot(2,1,1)
@@ -49,6 +60,6 @@ plt.xlabel('day')
 plt.ylabel('CTR')
 plt.ylim(bottom=0)
 plt.style.use('ggplot')
-
+ 
 plt.savefig('output.png')
 plt.show()
